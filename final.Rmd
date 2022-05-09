@@ -1,0 +1,473 @@
+---
+title: "final"
+author: "Shou Shimaya"
+date: "6/2/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(GGally)
+library(nlme)
+library(mgcv)
+aids <- read.csv("aids.csv")
+aids <- aids %>%
+  mutate(treatment = as.factor(treatment), 
+         gender = as.factor(gender))
+```
+
+#Exploratory Data Analysis of the AIDS Clinical Trial Dataset -------
+```{r}
+#Create subset of aids dataset with only baseline
+new_aids <- subset(aids, week == 0.0000, 
+                  select=c(id:log_cd4 ))
+# 1. Number of subjects and covariates available in the dataset --------
+aids %>%
+  count(id) %>%
+  pull(n) %>%
+  summary()
+
+aids %>%
+  count(id) %>%
+  count(n)
+
+n_distinct(aids$id)
+#- 1309 subjects.
+
+#- 4 covariates: treatment, week, age, gender
+```
+
+
+
+```{r pressure, echo=FALSE}
+#2. Univariate summaries (numerical and graphical) of each covariate --------
+summary(new_aids)
+summary(aids)
+
+#Age
+new_aids %>% 
+  ggplot(aes(x = age)) +
+  geom_histogram(bins = 14, color = "black", fill = "gray") +
+  labs(x = "Age (years)")
+#log_cd4
+new_aids %>% 
+  ggplot(aes(x = log_cd4)) +
+  geom_histogram(bins = 14, color = "black", fill = "gray") +
+  labs(x = "CD4 counts")
+#Week
+aids %>% 
+  ggplot(aes(x = week)) +
+  geom_histogram(bins = 14, color = "black", fill = "gray") +
+  labs(x = "Week(Since Baseline)")
+#Treatment
+new_aids %>% 
+  ggplot(aes(x = factor(treatment))) +
+  geom_bar() +
+  labs(x = "Treatment")
+#Gender
+new_aids %>% 
+  ggplot(aes(x = factor(gender))) +
+  geom_bar() +
+  labs(x = "Gender")
+```
+
+```{r}
+#3.Bivariate summaries (numerical and graphical) of variables in the dataset.----
+#Week Vs. Age  
+aids %>% 
+  ggplot(aes(x = age, y = week, color = factor(treatment))) +
+  geom_point() +
+  geom_smooth(formula = 'y ~ x', method = "loess", se = FALSE)
+  labs(x = "Age (years)", y = "Week")
+#Treatment Vs. Age
+new_aids %>% 
+  ggplot(aes(x = factor(treatment), y = age)) +
+  geom_boxplot() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Treatment", y = "Age (years)")
+#Gender Vs. Age
+new_aids %>% 
+  ggplot(aes(x = factor(gender), y = age)) +
+  geom_boxplot() +
+  labs(x = "Gender", y = "Age (years)")
+#Treatment Vs. Gender
+new_aids %>% 
+  ggplot(aes(x = factor(treatment), fill = factor(gender))) +
+  geom_bar(position = "dodge2") +
+  labs(x = "Treatment", fill = "Gender")
+#Treatment vs. Week
+aids %>% 
+  ggplot(aes(x = factor(treatment), y = week)) +
+  geom_boxplot() +
+  geom_smooth(method = "lm", se = FALSE) +
+  labs(x = "Treatment", y = "Week (Since Baseline)")
+#gender Vs. Week
+aids %>% 
+  ggplot(aes(x = factor(gender), y = week)) +
+  geom_boxplot() +
+  labs(x = "Gender", y = "Week(Since Baseline)")
+
+log_cd4_female <- subset(new_aids, gender == "female", 
+                  select=c(id:log_cd4 )) 
+log_cd4_male<- subset(new_aids, gender == "male", 
+                  select=c(id:log_cd4 )) 
+mean(log_cd4_female$log_cd4)
+mean(log_cd4_male$log_cd4)
+treatment1<- subset(new_aids, treatment == 1, 
+                  select=c(id:log_cd4 )) 
+treatment2<- subset(new_aids, treatment == 2, 
+                  select=c(id:log_cd4 )) 
+treatment3<- subset(new_aids, treatment == 3, 
+                  select=c(id:log_cd4 )) 
+treatment4<- subset(new_aids, treatment == 4, 
+                  select=c(id:log_cd4 )) 
+mean(treatment1$log_cd4)
+mean(treatment2$log_cd4)
+mean(treatment3$log_cd4)
+mean(treatment4$log_cd4)
+```
+
+```{r}
+#4. Overall trends of the response variable relative to other variables  --------
+#Change in age on change in CD4 based on gender
+new_aids %>% 
+  ggplot(aes(x = age, y = log_cd4, color = factor(gender))) +
+  geom_point() +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_point(shape = 1) +
+  geom_smooth(formula = 'y ~ x', method = "loess", se = FALSE) +
+  coord_cartesian(ylim = c(2, 3.3))+
+  labs(x = "Age (years)", y = "log_cd4 Counts", color = "gender")
+
+#Change in age on change in CD4 based on treatment
+new_aids %>% 
+  ggplot(aes(x = age, y = log_cd4, color = factor(treatment))) +
+  geom_point() +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_point(shape = 1) +
+  geom_smooth(formula = 'y ~ x', method = "loess", se = FALSE) +
+  coord_cartesian(ylim = c(2, 3.3))+
+  labs(x = "Age (years)", y = "log_cd4 Counts", color = "Treatment")
+
+aids %>% 
+  ggplot(aes(x = week, y = log_cd4, color = factor(treatment))) +
+  geom_point() +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_point(shape = 1) +
+  geom_smooth(formula = 'y ~ x', method = "loess", se = FALSE) +
+  coord_cartesian(ylim = c(2, 3.3))+
+  labs(x = "Week(Since Baseline)", y = "log_cd4 Counts", color = "Treatment")
+aids %>% 
+  ggplot(aes(x = week, y = log_cd4, color = factor(gender))) +
+  geom_point() +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_point(shape = 1) +
+  geom_smooth(formula = 'y ~ x', method = "loess", se = FALSE) +
+  coord_cartesian(ylim = c(2, 3.3))+
+  labs(x = "Week(Since Baseline)", y = "log_cd4 Counts", color = "Gender")
+```
+```{r}
+#5.Any imbalance in the dataset. ------------------------------------
+
+aids_male <- aids %>% 
+  filter(gender == "male")
+n_distinct(aids_male$id)
+```
+
+```{r}
+#6. Any outlier in the dataset. -----------------------------------------
+
+new_aids %>% 
+  ggplot(aes(y = age)) +
+  geom_boxplot()
+
+new_aids %>% 
+  ggplot(aes(y = log_cd4)) +
+  geom_boxplot()
+```
+
+#LME Modeling:
+```{r}
+aids %>% 
+  ggplot(aes(week, log_cd4, color = treatment)) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_point(shape = 1) +
+  geom_smooth(formula = 'y ~ x', method = "loess", se = FALSE) +
+  coord_cartesian(ylim = c(2, 3.3))
+```
+
+```{r}
+aids %>% 
+  ggplot(aes(week, log_cd4, color = gender)) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  geom_point(shape = 1) +
+  geom_smooth(formula = 'y ~ x', method = "loess", se = FALSE) +
+  coord_cartesian(ylim = c(2.1, 3.3))
+```
+
+```{r}
+model1 <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                treatment:I(week^3) + gender + gender:week + I(week^2):gender + I(week^3):gender +
+                age + I(age^2) + age:gender + age:treatment,
+              data = aids,
+              random = ~ week | id,
+              method = "ML")
+
+#drop "gender"
+model2 <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                treatment:I(week^3) + gender:week + I(week^2):gender + I(week^3):gender +
+                age + I(age^2) + age:gender + age:treatment,
+              data = aids,
+              random = ~ week | id,
+              method = "ML")
+
+#drop "age^2"
+model3 <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                treatment:I(week^3) + gender:week + I(week^2):gender + I(week^3):gender +
+                age + age:gender + age:treatment,
+              data = aids,
+              random = ~ week | id,
+              method = "ML")
+
+#drop "gender:week"
+model4 <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                treatment:I(week^3) + I(week^2):gender + I(week^3):gender + age + age:gender + age:treatment,
+              data = aids,
+              random = ~ week | id,
+              method = "ML")
+
+#drop "week^3:gender"
+model5 <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                treatment:I(week^3) + I(week^2):gender + age + age:gender + age:treatment,
+              data = aids,
+              random = ~ week | id,
+              method = "ML")
+
+#drop "age:gender"
+model6 <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                treatment:I(week^3) + I(week^2):gender + age + age:treatment,
+              data = aids,
+              random = ~ week | id,
+              method = "ML")
+
+#drop "age:treatment"
+model7 <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                treatment:I(week^3) + I(week^2):gender + age,
+              data = aids,
+              random = ~ week | id,
+              method = "ML")
+
+#drop "gender:week^2"
+model8 <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                treatment:I(week^3) + age,
+              data = aids,
+              random = ~ week | id,
+              method = "ML")
+```
+
+```{r}
+model8_REML <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                     treatment:I(week^3) + age,
+                   data = aids,
+                   random = ~ week | id,
+                   method = "REML")
+
+model8_2_REML <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                       treatment:I(week^3) + age,
+                     data = aids,
+                     random = ~ I(week^2) | id,
+                     method = "REML")
+
+model8_3_REML <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                       treatment:I(week^3) + age,
+                     data = aids,
+                     random = ~ week + I(week^2) | id,
+                     method = "REML")
+
+model8_4_REML <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                       treatment:I(week^3) + age,
+                     data = aids,
+                     random = ~ week + I(week^3) | id,
+                     method = "REML")
+
+model8_5_REML <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+                       treatment:I(week^3) + age,
+                     data = aids,
+                     random = ~ I(week^2) + I(week^3) | id,
+                     method = "REML")
+```
+
+```{r}
+model_final <- lme(log_cd4 ~ week + I(week^2) + I(week^3) + treatment:week + I(week^2):treatment + 
+               treatment:I(week^3) + age,
+             data = aids,
+             random = ~ week + I(week^2) | id,
+             method = "REML")
+```
+
+#Wald Test For LME
+```{r}
+L <- matrix(
+  c(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
+    ), 
+  nrow = 9, 
+  ncol = 14, 
+  byrow = TRUE
+)
+beta_hat <- model_final$coefficients$fixed
+cov_beta_hat <- vcov(model_final)
+Wald_statistic <- t(L %*% beta_hat) %*% solve(L %*% cov_beta_hat %*% t(L)) %*% (L %*% beta_hat)
+Wald_statistic
+pchisq(Wald_statistic, df = nrow(L), lower.tail = FALSE)
+```
+Residual Analysis: 
+```{r}
+#r_i = Y_i - X_i beta_hat(population residual)
+res_population <- residuals(model_final, type = "response", level= 0)
+
+#transformed residuals
+Sigma_i_hat <- extract.lme.cov(model_final, aids)
+L_i <- t(chol(Sigma_i_hat)) #block matrix of lower triangular Cholesky factors
+res_transformed <- solve(L_i)%*% res_population
+```
+
+```{r}
+# histogram of transformed residuals---------------------------------------------------------------
+tibble(r_star = res_transformed)%>%
+  ggplot(aes(x= r_star))+
+  geom_histogram(aes(y= stat(density)), bins = 14, color = "black", fill = "gray")+
+  geom_function(fun = dnorm, color = "blue")
+labs(x= "Transformed Residual", y= "Density")
+```
+```{r}
+# Mahalanobis Distance(d_i) ----------------------------------------------------
+
+mahalanobis_data <- tibble(id = aids$id, r_star = res_transformed)%>% 
+  group_by(id)%>%
+  nest()
+mahalanobis_data<- mahalanobis_data %>%  
+  mutate(df = map_dbl(data, ~nrow(.x)))
+
+mahalanobis_distance <- function(x){
+  x<- as.matrix(x)
+  t(x) %*% x
+}  
+mahalanobis_data <- mahalanobis_data %>%
+  mutate(d= map_dbl(data, ~mahalanobis_distance(.x)))
+
+mahalanobis_data <- mahalanobis_data %>%
+  mutate(p_value = pchisq(d, df, lower.tail = FALSE))
+
+mahalanobis_data%>%
+  arrange(p_value)
+```
+
+
+```{r}
+#QQ Plot
+tibble(r_star = res_transformed) %>% 
+  ggplot(aes(sample = r_star)) + 
+  geom_qq_line(color = "blue") +
+  geom_qq(shape = 1) + 
+  labs(x = "Quantiles of Standard Normal", y= "Quantiles of Transformed Residuals")
+#assumption of normality is justifiable
+```
+
+```{r}
+# Scatter Plots (Transformed Residual vs. Predicted Value) -----------------------------------------------------------
+
+mu_hat <- fitted(model_final, level = 0)
+mu_hat_transformed <- solve(L_i) %*% mu_hat
+
+tibble(x = mu_hat_transformed, y = res_transformed) %>% 
+  ggplot(aes(x= x, y= y)) +
+  geom_hline(yintercept = 0, linetype = "dashed") + 
+  geom_point(shape = 1)+ 
+  geom_smooth(method = "loess", se = FALSE) + 
+  labs(x = "Transformed Predicted", y = "Transformed Residuals")
+#The model for the mean is correctlt specified
+```
+
+```{r}
+# Absolute Transformed Residuals -----------------------------------------
+
+abs_res_transformed <- abs(res_transformed)
+tibble(x = mu_hat_transformed, y = abs_res_transformed) %>% 
+  ggplot(aes(x= x, y= y)) +
+  geom_hline(yintercept = 0.8, linetype = "dashed") + 
+  geom_point(shape = 1)+ 
+  geom_smooth(method = "loess", se = FALSE) + 
+  labs(x = "Transformed Predicted", y = "Absolute Transformed Residuals")
+```
+
+```{r}
+# Semi_Variogram  ---------------------------------------------------------
+
+Variogram(model_final, 
+          data = aids,
+          form = ~ I(week^2) + week|id, 
+          resType = "normalized") %>% 
+  as_tibble() %>% 
+  ggplot(aes(x = dist, y= variog)) + 
+  geom_hline(yintercept = 1, linetype = "dashed") +
+  geom_point(shape = 1)+
+  geom_smooth(method = "loess", se = FALSE, span = 0.2)
+```
+
+#GLME Modeling:
+
+```{r}
+aids <- aids %>% 
+  mutate(week = scale(week))
+```
+
+```{r}
+model_glme <- glmer(cd4_count ~ week + I(week^2) + I(week^3)+ treatment:week + I(week^2):treatment 
+                       + I(week^3):treatment+ age + (1 + week + I(week^2)| id),
+                    data = aids,
+                    family = poisson(),
+                    control = glmerControl(tol = 1e-12),
+                    nAGQ = 0, 
+                    na.action = na.omit)
+
+summary(model_glme)
+```
+
+#Wald Test
+```{r}
+L2 <- matrix(
+  c(0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1
+    ), 
+  nrow = 9, 
+  ncol = 14, 
+  byrow = TRUE
+)
+beta_hat2 <- summary(model_glme)$coefficients[, 1]
+cov_beta_hat2 <- vcov(model_glme) %>% as.matrix()
+Wald_statistic2 <- t(L2 %*% beta_hat2) %*% solve(L2 %*% cov_beta_hat2 %*% t(L2)) %*% (L2 %*% beta_hat2)
+Wald_statistic2
+pchisq(Wald_statistic2, df = nrow(L2), lower.tail = FALSE)
+```
+
+
+
